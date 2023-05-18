@@ -19,6 +19,8 @@ myFileSystem::myFileSystem(char diskName[16]) {
   // open the file with the above name.
   // this file will act as the "disk" for your file system.
     disk.open(diskName);
+    int rc = pthread_mutex_init(&mem_lock, NULL);
+    assert(rc == 0); // properly initialize the lock
 }
 
 int myFileSystem::create_file(char name[8], int size) {
@@ -107,6 +109,7 @@ int myFileSystem::create_file(char name[8], int size) {
     int node_offset = (c_node * 48 ) + 128;
     disk.seekp(node_offset, disk.beg);
     disk.write((char *)&inode, 48);
+    disk.flush();
     // Good luck!
     return 1;
   }
@@ -166,6 +169,8 @@ int myFileSystem::delete_file(char name[8]) {
   disk.seekp((128 + (48 * file_num)), disk.beg);
   disk.write((char *)&inode, 48);
 
+  disk.flush();
+
   // return 1;
   return 1;
 }  // End Delete
@@ -189,8 +194,8 @@ int myFileSystem::ls(char buf[1024]) {
       s << "name = " << inode.name << " and size = " << inode.size << ".\n";
     }
   }
-
-  sprintf( buf, "%s", s.str());
+  cout << s.str() << endl;
+  // sprintf( buf, "%s", (char *)(s.str()));
 
   return 0;
 }  // End ls
@@ -269,6 +274,7 @@ int myFileSystem::write(char name[8], int blockNum, char buf[1024]) {
     int addr = inode.blockPointers[blockNum];
     disk.seekp((addr * 1024), disk.beg);
     disk.write(buf, 1024);
+    disk.flush();
     return 1;
   }
   else {

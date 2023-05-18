@@ -10,14 +10,18 @@ using namespace std;
 
 int main(int argc, char* argv[]) {
 
-  myFileSystem *f = new myFileSystem((char*)"disk0");// initialize file
+  if (argc == 1) {
+    fprintf(stderr, "usage: %s <diskFileName> \n", argv[0]);
+    exit(0);
+  }
+
+  myFileSystem *f = new myFileSystem((char*)argv[1]);// initialize file
 
   int rc;
   vector<pthread_t> connections;
 
   // Start a server socket to listen to incoming connections and listen to them
-
-  int server_fd, new_socket, valread;
+  int server_fd, new_socket;
 	struct sockaddr_in address;
 	int opt = 1;
 	int addrlen = sizeof(address);
@@ -52,6 +56,7 @@ int main(int argc, char* argv[]) {
 		exit(EXIT_FAILURE);
 	}
   // -- CODE till create socket and listen
+
   // keep listening to incoming connections and spin a new thread after each thread is created and give them a file object
   while(true){
     if ((new_socket
@@ -61,6 +66,8 @@ int main(int argc, char* argv[]) {
       perror("accept");
       exit(EXIT_FAILURE);
     }
+
+    cout << "User " << new_socket << " has connected to the file system!\n";
 
     pthread_t new_conn;
 
@@ -89,24 +96,27 @@ int main(int argc, char* argv[]) {
  */
 void* worker(void *args){
 
-  int valread, cmd_cnt, socket, ret;
+  int cmd_cnt, socket, ret;
 
   argPointers * thread_args = (argPointers *)args;
   socket = (long long int) thread_args->socket_fd;
   myFileSystem *f = (myFileSystem *)(thread_args->file_pointer);
 
-  char buffer[1024];
+  char buffer[1024]; // read incoming packets and strtok
   for (int i = 0; i < 1024; i++) {
     buffer[i] = '\0';
   }
   char buff[1024];
-  // fill dummy buffer with 1's
+  // fill dummy buffer with 1's to write default
   for (int i = 0; i < 1024; i++) {
     buff[i] = '1';
   }
   char read_buff[1024]; // read buffer
+  for (int i = 0; i < 2048; i++) {
+    read_buff[i] = '\0';
+  }
 
-  char send_buff[2048];
+  char send_buff[2048]; // send buffer back to the client
   for (int i = 0; i < 2048; i++) {
     send_buff[i] = '\0';
   }
@@ -119,7 +129,7 @@ void* worker(void *args){
 
   while (true) {
     // split line into parts
-    valread = read(socket, buffer, 1024);
+    read(socket, buffer, 1024);
     
     cmd_cnt = 0;
     input = strtok(buffer, " ");
@@ -134,26 +144,41 @@ void* worker(void *args){
 
 
     switch (*cmd[0]) {
+      // Use thread safe access to memory, memory access level set to Serializable
+      // Will only observe completed operations
+
       case 'C': {
+        
+        pthread_mutex_lock(&(f->mem_lock));
         ret = f->create_file((char*)cmd[1], atoi(cmd[2]));
+        pthread_mutex_unlock(&(f->mem_lock));
+
         if(ret == 1){
-          sprintf(send_buff, "Successfully created file %s.\n", (char *)cmd[1]);
+          sprintf(send_buff, "Successfully created file %s.\n", cmd[1]);
         }else{
           sprintf(send_buff, "Failed file creation.\n");
         }
         break;
       }
       case 'D': {
+
+        pthread_mutex_lock(&(f->mem_lock));
         ret = f->delete_file((char*)cmd[1]);
+        pthread_mutex_unlock(&(f->mem_lock));
+
         if(ret == 1){
-          sprintf(send_buff, "Successfully deleted file %s.\n", (char *)cmd[1]);
+          sprintf(send_buff, "Successfully deleted file %s.\n", cmd[1]);
         }else{
           sprintf(send_buff, "Failed file deletion.\n");
         }
         break;
       }
       case 'L': {
-        f->ls(read_buff);
+
+        pthread_mutex_lock(&(f->mem_lock));
+        ret = f->ls(send_buff);
+        pthread_mutex_unlock(&(f->mem_lock));
+
         if(ret == 0){
           sprintf(send_buff, "%s",read_buff);
         }else{
@@ -162,18 +187,27 @@ void* worker(void *args){
         break;
       }
       case 'R': {
+
+        pthread_mutex_lock(&(f->mem_lock));
         ret = f->read((char*)cmd[1], atoi(cmd[2]), read_buff);
+        pthread_mutex_unlock(&(f->mem_lock));
+
         if(ret == 1){
-          sprintf(send_buff, "Successfully read file %s.\noutput:\n%s", (char *)cmd[1], read_buff);
+          cout << cmd[1];
+          sprintf(send_buff, "Successfully read file %s.\noutput:\n%s", cmd[1], read_buff);
         }else{
           sprintf(send_buff, "Failed reading file.\n");
         }
         break;
       }
       case 'W': {
+
+        pthread_mutex_lock(&(f->mem_lock));
         ret = f->write((char*)cmd[1], atoi(cmd[2]), buff);
+        pthread_mutex_unlock(&(f->mem_lock));
+
         if(ret == 1){
-          sprintf(send_buff, "Write successful for file %s.", (char *)cmd[1]);
+          sprintf(send_buff, "Write successful for file %s.\n", cmd[1]);
         }else{
           sprintf(send_buff, "Failed writing to file.\n");
         }
@@ -191,14 +225,17 @@ void* worker(void *args){
       }
     }  // end switch
 
-    send(socket, send_buff, strlen(send_buff), 0);
-    printf("message sent to %d\n", socket);
+    send(socket, send_buff, strlen(send_buff), 0); // send the message to the telnet client
+    printf("Message sent to client %d\n", socket);
 
     for (int i = 0; i < 1024; i++) {
       buffer[i] = '\0';
     } // clear buffer
     for (int i = 0; i < 2048; i++) {
       send_buff[i] = '\0';
+    } // clear send_buff
+    for (int i = 0; i < 1024; i++) {
+      read_buff[i] = '\0';
     } // clear send_buff
 
     if(quit){

@@ -3,7 +3,7 @@ _OBJ = fs.o
 _MOBJ = main.o
 _TOBJ = test.o
 
-APPBIN = fs_app
+APPBIN = cloud_fs
 TESTBIN = fs_test
 
 IDIR = include
