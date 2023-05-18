@@ -65,6 +65,7 @@ L                           #   List the current files
 ![remote host 2 log](./images/remote_host_2.png)
 
 
+### Link to Presentation Video
+You can find the video in the presentation directory along with the slides I used
 
-
-
+[Video](./presentation/presentation_AGumidelli.mp4)
