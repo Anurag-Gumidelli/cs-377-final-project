@@ -20,6 +20,8 @@ int main(int argc, char* argv[]) {
   int rc;
   vector<pthread_t> connections;
 
+  // -------SERVER NETWORK SETUP CODE STARTS---------
+
   // Start a server socket to listen to incoming connections and listen to them
   int server_fd, new_socket;
 	struct sockaddr_in address;
@@ -55,10 +57,11 @@ int main(int argc, char* argv[]) {
 		perror("listen");
 		exit(EXIT_FAILURE);
 	}
-  // -- CODE till create socket and listen
+ // -------SERVER NETWORK SETUP CODE ENDS---------
 
-  // keep listening to incoming connections and spin a new thread after each thread is created and give them a file object
-  while(true){
+  cout << "Server is up and running for disk image " << (char*)argv[1] << " on server port " << PORT << ".\n";
+
+  while(true){ // keep listening to incoming connections and spin a new thread after each thread is created and give them a file object
     if ((new_socket
       = accept(server_fd, (struct sockaddr*)&address,
           (socklen_t*)&addrlen))
@@ -77,6 +80,7 @@ int main(int argc, char* argv[]) {
     (*worker_args).file_pointer = (void *)f;
 
     rc = pthread_create(&new_conn, NULL, worker, (void *)worker_args);
+    // create new worker thread and launch it with the appropriate arguments (worker_args) FileSystem object and Socket_fd
     assert(rc == 0);
 
     connections.push_back(new_conn);
@@ -90,7 +94,7 @@ int main(int argc, char* argv[]) {
 
 /**
  * @brief Handle new TCP connections and connect them with the file
- * 
+ * This worker thread 
  * @param socket_fd
  * @return void* 
  */
@@ -147,7 +151,7 @@ void* worker(void *args){
       // Use thread safe access to memory, memory access level set to Serializable
       // Will only observe completed operations
 
-      case 'C': {
+      case 'C': { // CREATE
         
         pthread_mutex_lock(&(f->mem_lock));
         ret = f->create_file((char*)cmd[1], atoi(cmd[2]));
@@ -160,7 +164,7 @@ void* worker(void *args){
         }
         break;
       }
-      case 'D': {
+      case 'D': { // DELETE
 
         pthread_mutex_lock(&(f->mem_lock));
         ret = f->delete_file((char*)cmd[1]);
@@ -173,7 +177,7 @@ void* worker(void *args){
         }
         break;
       }
-      case 'L': {
+      case 'L': { // LIST FILES
 
         pthread_mutex_lock(&(f->mem_lock));
         ret = f->ls(send_buff);
@@ -186,7 +190,7 @@ void* worker(void *args){
         }
         break;
       }
-      case 'R': {
+      case 'R': { // READ FILE BLOCK
 
         pthread_mutex_lock(&(f->mem_lock));
         ret = f->read((char*)cmd[1], atoi(cmd[2]), read_buff);
@@ -200,7 +204,7 @@ void* worker(void *args){
         }
         break;
       }
-      case 'W': {
+      case 'W': { // WRITE FILE BLOCK
 
         pthread_mutex_lock(&(f->mem_lock));
         ret = f->write((char*)cmd[1], atoi(cmd[2]), buff);
@@ -213,19 +217,19 @@ void* worker(void *args){
         }
         break;
       }
-      case 'Q':{
+      case 'Q':{ // CLOSE THIS TCP connection 
         quit = true;
         sprintf(send_buff, "Bye!\n");
         break;
-      }
-      default: {
+      } 
+      default: { // Unknown operation suggest Quit option
         printf("No OP!\n");
         sprintf(send_buff, "To quit select: Q\n\n");
         break;
       }
     }  // end switch
 
-    send(socket, send_buff, strlen(send_buff), 0); // send the message to the telnet client
+    send(socket, send_buff, strlen(send_buff), 0); // send the message to the telnet client wiht success, failure and/or read blocks!
     printf("Message sent to client %d\n", socket);
 
     for (int i = 0; i < 1024; i++) {
@@ -243,7 +247,7 @@ void* worker(void *args){
     }
   }
 
-  close(socket);
+  close(socket); // close the socket stated here and join the main thread
   
   return NULL;
 }
